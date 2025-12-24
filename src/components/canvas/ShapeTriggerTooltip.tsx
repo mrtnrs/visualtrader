@@ -220,7 +220,7 @@ export default function ShapeTriggerTooltip({
     color: 'var(--kf-text)',
   }
 
-  const headerStyle: CSSProperties = {
+  const _headerStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',

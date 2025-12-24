@@ -160,7 +160,7 @@ export type CanvasToolbarProps = {
 }
 
 export function CanvasToolbar({
-    symbol,
+    symbol: _symbol,
     symbolDraft,
     setSymbolDraft,
     onSymbolChange,

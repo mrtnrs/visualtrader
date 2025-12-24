@@ -100,7 +100,7 @@ export default function TriggerPill({
 
   // Visual Components
   // 1. Condition Trigger (Small Badge)
-  const hasAction = trigger.actions.length > 0
+  const _hasAction = trigger.actions.length > 0
   const triggerBadgeStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',

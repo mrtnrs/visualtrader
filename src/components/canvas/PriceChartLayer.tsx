@@ -1070,7 +1070,7 @@ export default function PriceChartLayer({
               e.dataTransfer.dropEffect = 'copy'
               setDropHoverPosId(id)
             }}
-            onDragLeave={(e, id) => {
+            onDragLeave={(_e, id) => {
               setDropHoverPosId((cur) => (cur === id ? null : cur))
             }}
             onDrop={(e, id) => {

@@ -434,7 +434,7 @@ function PriceInputWithDiff({
 // Toggle Switch
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ToggleSwitch({
+function _ToggleSwitch({
   label,
   description,
   checked,
