@@ -431,11 +431,11 @@ function PriceInputWithDiff({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Toggle Switch
+// Toggle Switch (commented out - reserved for future use)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _ToggleSwitch({
+/*
+function ToggleSwitch({
   label,
   description,
   checked,
@@ -498,6 +498,7 @@ function _ToggleSwitch({
     </label>
   )
 }
+*/
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Trailing Offset Input

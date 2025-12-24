@@ -13,14 +13,13 @@ import type {
     StrategyBuilderBarProps,
     ShapeType,
     TriggerCondition,
-    LineCondition,
-    RectangleCondition,
-    CircleCondition,
-    ParallelCondition,
 } from './strategy-builder.types'
+// Unused condition imports commented out for now:
+// LineCondition, RectangleCondition, CircleCondition, ParallelCondition
 
 // ─────────────────────────────────────────────────────────────────
 // ICONS
+// Note: Shape condition icons (IconCrossUp, IconCrossDown, etc.) are in TriggerIcons.tsx
 // ─────────────────────────────────────────────────────────────────
 
 function IconMarket({ size = 20 }: { size?: number }) {
@@ -54,76 +53,6 @@ function IconShort({ size = 16 }: { size?: number }) {
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 4v16" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
             <path d="M5 13l7 7 7-7" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
-
-// Shape condition icons
-function IconCrossUp({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 16l8-8 8 8" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" />
-        </svg>
-    )
-}
-
-function IconCrossDown({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 8l8 8 8-8" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" />
-        </svg>
-    )
-}
-
-function IconTouch({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="3" fill="#f59e0b" />
-            <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-    )
-}
-
-function IconExitTop({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="4" y="8" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.1" />
-            <path d="M12 8V3" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M9 5l3-3 3 3" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
-
-function IconExitBottom({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="4" y="6" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.1" />
-            <path d="M12 16v5" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M9 19l3 3 3-3" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
-
-function IconEnterZone({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" fill="#22c55e" fillOpacity="0.2" />
-            <path d="M2 12h6" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" />
-            <path d="M6 9l3 3-3 3" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
-
-function IconExitAny({ size = 20 }: { size?: number }) {
-    return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.08" />
-            <path d="M12 4v3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M12 17v3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M4 12h3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M17 12h3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
     )
 }
@@ -190,6 +119,8 @@ const DEFAULT_ITEMS: DockItemDef[] = [
     { id: 'trailing-stop', type: 'trailing_stop', label: 'Trailing Stop', icon: <IconTrail />, side: 'sell' },
 ]
 
+// Reserved for future use - shape-specific condition arrays
+/*
 const LINE_ITEMS: DockItemDef[] = [
     { id: 'cross-up', label: 'Cross Up', icon: <IconCrossUp />, condition: 'cross_up' as LineCondition },
     { id: 'cross-down', label: 'Cross Down', icon: <IconCrossDown />, condition: 'cross_down' as LineCondition },
@@ -222,13 +153,13 @@ const PARALLEL_ITEMS: DockItemDef[] = [
     { id: 'enter-channel', label: 'Enter Channel', icon: <IconEnterZone />, condition: 'enter_channel' as ParallelCondition },
 ]
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const ITEMS_BY_SHAPE: Record<ShapeType, DockItemDef[]> = {
     line: LINE_ITEMS,
     rectangle: RECTANGLE_ITEMS,
     circle: CIRCLE_ITEMS,
     parallel: PARALLEL_ITEMS,
 }
+*/
 
 const SHAPE_LABELS: Record<ShapeType, string> = {
     line: 'Line',
