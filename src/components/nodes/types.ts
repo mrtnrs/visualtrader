@@ -57,6 +57,10 @@ export type OrderNodeData = BaseNodeData & {
   totalQuantity?: number
   visibleQuantity?: number
 
+  rootNodeId?: string
+  relativeOffsetPct?: number
+  relativeOffsetX?: number
+
   isChild?: boolean
   hasChildren?: boolean
   childrenCount?: number

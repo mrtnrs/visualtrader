@@ -398,14 +398,17 @@ export default function TriggerPillManager({
         const info = getActionDockInfo(child.type, side, 16)
 
         const cfg = child.config ?? {}
-        const valueText = (() => {
+        const closePercent = typeof cfg.closePercent === 'number' && Number.isFinite(cfg.closePercent) ? cfg.closePercent : null
+        const closeText = closePercent != null ? `Close ${Math.max(1, Math.min(100, Math.round(closePercent)))}% of position` : null
+
+        const secondaryText = (() => {
           if ((child.type === 'trailing_stop' || child.type === 'trailing_stop_limit') && typeof cfg.trailingOffset === 'number') {
             const unit = cfg.trailingOffsetUnit ?? 'percent'
             const raw = cfg.trailingOffset
             const off = unit === 'percent' ? `${raw.toFixed(2)}%` : raw.toLocaleString(undefined, { maximumFractionDigits: 2 })
-            return `${off} ${resolved.level.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            return `Trail ${off}`
           }
-          return resolved.level.toLocaleString(undefined, { maximumFractionDigits: 2 })
+          return null
         })()
 
         nodes.push(
@@ -483,9 +486,16 @@ export default function TriggerPillManager({
           >
             <div style={{ color: resolved.color, display: 'grid', placeItems: 'center' }}>{info.icon}</div>
             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--kf-text)', textAlign: 'center', lineHeight: 1.05 }}>{info.label}</div>
-            <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.8, color: 'var(--kf-text)', textAlign: 'center', lineHeight: 1.1 }}>
-              {valueText}
-            </div>
+            {closeText ? (
+              <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.95, color: 'var(--kf-text)', textAlign: 'center', lineHeight: 1.1 }}>
+                {closeText}
+              </div>
+            ) : null}
+            {secondaryText ? (
+              <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.75, color: 'var(--kf-text)', textAlign: 'center', lineHeight: 1.1 }}>
+                {secondaryText}
+              </div>
+            ) : null}
           </div>,
         )
       }

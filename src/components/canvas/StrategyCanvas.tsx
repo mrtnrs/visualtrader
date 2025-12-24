@@ -1247,6 +1247,77 @@ export default function StrategyCanvas() {
       const now = timeCenter
       let changed = false
 
+      const byId = new Map<string, Node>()
+      for (const n of nds) {
+        byId.set(n.id, n)
+      }
+
+      const incoming = new Map<string, string[]>()
+      for (const e of edges) {
+        const tgt = String((e as any).target)
+        const src = String((e as any).source)
+        const arr = incoming.get(tgt)
+        if (arr) arr.push(src)
+        else incoming.set(tgt, [src])
+      }
+
+      const rootCache = new Map<string, string | null>()
+      const findRootId = (startId: string): string | null => {
+        const cached = rootCache.get(startId)
+        if (cached !== undefined) {
+          return cached
+        }
+        const q: string[] = [startId]
+        const seen = new Set<string>()
+        while (q.length) {
+          const id = q.shift() as string
+          if (seen.has(id)) continue
+          seen.add(id)
+          const node = byId.get(id)
+          if (node?.type && isRootNodeType(node.type)) {
+            rootCache.set(startId, node.id)
+            return node.id
+          }
+          const prev = incoming.get(id) ?? []
+          for (const p of prev) {
+            if (!seen.has(p)) q.push(p)
+          }
+        }
+        rootCache.set(startId, null)
+        return null
+      }
+
+      const rootInfo = new Map<string, { desiredX: number | null; refPrice: number | null }>()
+      for (const n of nds) {
+        if (!n.type || n.type === 'entry') {
+          continue
+        }
+        if (!isRootNodeType(n.type)) {
+          continue
+        }
+
+        const data = (n.data as any) ?? {}
+        let desiredX: number | null = null
+        if (n.type === 'market' && typeof lastPrice === 'number' && Number.isFinite(lastPrice)) {
+          desiredX = timestampToX(now, now, timeWindowMs, chartDims)
+        } else if (typeof data.anchorTimestamp === 'number') {
+          desiredX = timestampToX(data.anchorTimestamp, now, timeWindowMs, chartDims) - 20
+        }
+
+        const refPrice =
+          n.type === 'market'
+            ? typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice > 0
+              ? lastPrice
+              : null
+            : typeof data.limitPrice === 'number' && Number.isFinite(data.limitPrice) && data.limitPrice > 0
+              ? data.limitPrice
+              : typeof data.anchorPrice === 'number' && Number.isFinite(data.anchorPrice) && data.anchorPrice > 0
+                ? data.anchorPrice
+                : null
+
+        rootInfo.set(n.id, { desiredX: desiredX ?? n.position.x, refPrice })
+      }
+
       const next = nds.map((n) => {
         if (!n.type || n.type === 'entry') {
           return n
@@ -1261,9 +1332,52 @@ export default function StrategyCanvas() {
         let desiredY: number | null = null
         let desiredX: number | null = null
         let desiredAnchorPrice: number | null = null
+        let patchData: Record<string, unknown> | null = null
 
         if (typeof data.anchorTimestamp === 'number') {
           desiredX = timestampToX(data.anchorTimestamp, now, timeWindowMs, chartDims) - 20
+        }
+
+        const isChild = Boolean((data as any).isChild)
+        if (isChild && data.active !== false && n.type !== 'trailing_stop' && n.type !== 'trailing_stop_limit') {
+          const rootId = typeof (data as any).rootNodeId === 'string' ? (data as any).rootNodeId : findRootId(n.id)
+          if (typeof rootId === 'string') {
+            const info = rootInfo.get(rootId)
+            const rootNode = byId.get(rootId)
+            const rootRef = info?.refPrice
+
+            if (rootNode && typeof rootRef === 'number' && Number.isFinite(rootRef) && rootRef > 0) {
+              const computedPct =
+                typeof (data as any).relativeOffsetPct === 'number' && Number.isFinite((data as any).relativeOffsetPct)
+                  ? (data as any).relativeOffsetPct
+                  : typeof (data as any).anchorPrice === 'number' && Number.isFinite((data as any).anchorPrice) && (data as any).anchorPrice > 0
+                    ? (((data as any).anchorPrice / rootRef) - 1) * 100
+                    : null
+
+              const computedX =
+                typeof (data as any).relativeOffsetX === 'number' && Number.isFinite((data as any).relativeOffsetX)
+                  ? (data as any).relativeOffsetX
+                  : n.position.x - rootNode.position.x
+
+              if (typeof computedPct === 'number' && Number.isFinite(computedPct)) {
+                const childPrice = rootRef * (1 + computedPct / 100)
+                desiredY = priceToY(childPrice, domain, chartDims) - 20
+                desiredAnchorPrice = childPrice
+
+                const rootDesiredX = info?.desiredX
+                if (typeof rootDesiredX === 'number' && Number.isFinite(rootDesiredX) && typeof computedX === 'number' && Number.isFinite(computedX)) {
+                  desiredX = rootDesiredX + computedX
+                }
+
+                patchData = {
+                  ...(patchData ?? {}),
+                  rootNodeId: rootId,
+                  relativeOffsetPct: computedPct,
+                  relativeOffsetX: computedX,
+                }
+              }
+            }
+          }
         }
 
         if (n.type === 'market' && typeof lastPrice === 'number' && Number.isFinite(lastPrice)) {
@@ -1292,7 +1406,27 @@ export default function StrategyCanvas() {
         const xOk = desiredX == null || Math.abs(n.position.x - desiredX) < 0.5
         const yOk = Math.abs(n.position.y - desiredY) < 0.5
 
-        if (xOk && yOk) {
+        const needsAnchorUpdate =
+          desiredAnchorPrice != null &&
+          (!(typeof (data as any).anchorPrice === 'number') || Math.abs((data as any).anchorPrice - desiredAnchorPrice) > 1e-9)
+
+        const needsTypePriceUpdate = (() => {
+          if (desiredAnchorPrice == null) return false
+          if (n.type === 'limit' || n.type === 'iceberg') {
+            return !(typeof (data as any).limitPrice === 'number') || Math.abs((data as any).limitPrice - desiredAnchorPrice) > 1e-9
+          }
+          if (n.type === 'stop_loss' || n.type === 'stop_loss_limit') {
+            return !(typeof (data as any).stopPrice === 'number') || Math.abs((data as any).stopPrice - desiredAnchorPrice) > 1e-9
+          }
+          if (n.type === 'take_profit' || n.type === 'take_profit_limit') {
+            return !(typeof (data as any).triggerPrice === 'number') || Math.abs((data as any).triggerPrice - desiredAnchorPrice) > 1e-9
+          }
+          return false
+        })()
+
+        const needsPatch = patchData != null && Object.keys(patchData).length > 0
+
+        if (xOk && yOk && !needsAnchorUpdate && !needsTypePriceUpdate && !needsPatch) {
           return n
         }
 
@@ -1303,12 +1437,28 @@ export default function StrategyCanvas() {
           y: desiredY,
         }
 
-        if (desiredAnchorPrice != null) {
-          return {
-            ...n,
-            position: nextPos,
-            data: { ...(data as Record<string, unknown>), anchorPrice: desiredAnchorPrice },
+        let nextData: Record<string, unknown> | null = null
+        if (needsAnchorUpdate || needsTypePriceUpdate || needsPatch) {
+          nextData = { ...(data as Record<string, unknown>) }
+          if (needsAnchorUpdate && desiredAnchorPrice != null) {
+            ; (nextData as any).anchorPrice = desiredAnchorPrice
           }
+          if (needsTypePriceUpdate && desiredAnchorPrice != null) {
+            if (n.type === 'limit' || n.type === 'iceberg') {
+              ; (nextData as any).limitPrice = desiredAnchorPrice
+            } else if (n.type === 'stop_loss' || n.type === 'stop_loss_limit') {
+              ; (nextData as any).stopPrice = desiredAnchorPrice
+            } else if (n.type === 'take_profit' || n.type === 'take_profit_limit') {
+              ; (nextData as any).triggerPrice = desiredAnchorPrice
+            }
+          }
+          if (patchData) {
+            nextData = { ...nextData, ...patchData }
+          }
+        }
+
+        if (nextData) {
+          return { ...n, position: nextPos, data: nextData }
         }
 
         return { ...n, position: nextPos }
@@ -1316,7 +1466,7 @@ export default function StrategyCanvas() {
 
       return changed ? next : nds
     })
-  }, [chartDims, domain, lastPrice, priceHistory.length, setNodes, timeCenter, timeWindowMs])
+  }, [chartDims, domain, edges, lastPrice, priceHistory.length, setNodes, timeCenter, timeWindowMs])
 
   const onNodesChangeWithAnchors = useCallback(
     (changes: NodeChange[]) => {
@@ -1360,10 +1510,103 @@ export default function StrategyCanvas() {
           })
           : updated
 
-        return withSizing.map(applyAnchors)
+        const anchored = withSizing.map(applyAnchors)
+
+        const byId = new Map<string, Node>()
+        for (const n of anchored) {
+          byId.set(n.id, n)
+        }
+
+        const incoming = new Map<string, string[]>()
+        for (const e of edges) {
+          const tgt = String((e as any).target)
+          const src = String((e as any).source)
+          const arr = incoming.get(tgt)
+          if (arr) arr.push(src)
+          else incoming.set(tgt, [src])
+        }
+
+        const rootCache = new Map<string, string | null>()
+        const findRootId = (startId: string): string | null => {
+          const cached = rootCache.get(startId)
+          if (cached !== undefined) {
+            return cached
+          }
+          const q: string[] = [startId]
+          const seen = new Set<string>()
+          while (q.length) {
+            const id = q.shift() as string
+            if (seen.has(id)) continue
+            seen.add(id)
+            const node = byId.get(id)
+            if (node?.type && isRootNodeType(node.type)) {
+              rootCache.set(startId, node.id)
+              return node.id
+            }
+            const prev = incoming.get(id) ?? []
+            for (const p of prev) {
+              if (!seen.has(p)) q.push(p)
+            }
+          }
+          rootCache.set(startId, null)
+          return null
+        }
+
+        return anchored.map((n) => {
+          if (!n.type || n.type === 'entry') {
+            return n
+          }
+          const data = (n.data as any) ?? {}
+          if (!data.isChild) {
+            return n
+          }
+          const rootId = typeof data.rootNodeId === 'string' ? data.rootNodeId : findRootId(n.id)
+          if (typeof rootId !== 'string') {
+            return n
+          }
+
+          const root = byId.get(rootId)
+          if (!root) {
+            return n
+          }
+
+          const rootData = (root.data as any) ?? {}
+          const rootRefPrice =
+            root.type === 'market'
+              ? typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice > 0
+                ? lastPrice
+                : null
+              : typeof rootData.limitPrice === 'number' && Number.isFinite(rootData.limitPrice) && rootData.limitPrice > 0
+                ? rootData.limitPrice
+                : typeof rootData.anchorPrice === 'number' && Number.isFinite(rootData.anchorPrice) && rootData.anchorPrice > 0
+                  ? rootData.anchorPrice
+                  : null
+
+          const childPrice = typeof data.anchorPrice === 'number' && Number.isFinite(data.anchorPrice) && data.anchorPrice > 0 ? data.anchorPrice : null
+          const relativeOffsetPct = rootRefPrice && childPrice ? ((childPrice / rootRefPrice) - 1) * 100 : undefined
+          const relativeOffsetX = n.position.x - root.position.x
+
+          const needsRoot = data.rootNodeId !== rootId
+          const needsPct = typeof relativeOffsetPct === 'number' && Number.isFinite(relativeOffsetPct) && (!(typeof data.relativeOffsetPct === 'number') || Math.abs(data.relativeOffsetPct - relativeOffsetPct) > 1e-9)
+          const needsX = !(typeof data.relativeOffsetX === 'number') || Math.abs(data.relativeOffsetX - relativeOffsetX) > 1e-9
+
+          if (!needsRoot && !needsPct && !needsX) {
+            return n
+          }
+
+          return {
+            ...n,
+            data: {
+              ...(data as Record<string, unknown>),
+              rootNodeId: rootId,
+              relativeOffsetPct: needsPct ? relativeOffsetPct : data.relativeOffsetPct,
+              relativeOffsetX,
+            },
+          }
+        })
       })
     },
-    [applyAnchors, setNodes],
+    [applyAnchors, edges, lastPrice, setNodes],
   )
 
   const onConnect = useCallback(
@@ -1429,7 +1672,40 @@ export default function StrategyCanvas() {
         data,
       }
 
-      const anchored = applyAnchors(newNode)
+      let anchored = applyAnchors(newNode)
+
+      if (isExitNodeType(type) && nearestRoot) {
+        const rootData = (nearestRoot.data as Record<string, unknown>) ?? {}
+        const rootRefPrice =
+          nearestRoot.type === 'market'
+            ? typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice > 0
+              ? lastPrice
+              : null
+            : typeof (rootData as any).limitPrice === 'number' && Number.isFinite((rootData as any).limitPrice) && (rootData as any).limitPrice > 0
+              ? (rootData as any).limitPrice
+              : typeof (rootData as any).anchorPrice === 'number' && Number.isFinite((rootData as any).anchorPrice) && (rootData as any).anchorPrice > 0
+                ? (rootData as any).anchorPrice
+                : null
+
+        const anchoredData = (anchored.data as Record<string, unknown>) ?? {}
+        const childPrice = typeof (anchoredData as any).anchorPrice === 'number' && Number.isFinite((anchoredData as any).anchorPrice) && (anchoredData as any).anchorPrice > 0
+          ? (anchoredData as any).anchorPrice
+          : null
+
+        const relativeOffsetPct = rootRefPrice && childPrice ? ((childPrice / rootRefPrice) - 1) * 100 : undefined
+        const relativeOffsetX = anchored.position.x - nearestRoot.position.x
+
+        anchored = {
+          ...anchored,
+          data: {
+            ...anchoredData,
+            rootNodeId: nearestRoot.id,
+            relativeOffsetPct,
+            relativeOffsetX,
+          },
+        }
+      }
+
       setNodes((nds) => nds.concat(anchored))
 
       if (isExitNodeType(type) && nearestRoot) {
@@ -1442,7 +1718,7 @@ export default function StrategyCanvas() {
         setEdges((es) => [...es, newEdge])
       }
     },
-    [applyAnchors, getNodeDefinition, nodes, screenToFlowPosition, setEdges, setNodes],
+    [applyAnchors, getNodeDefinition, lastPrice, nodes, screenToFlowPosition, setEdges, setNodes],
   )
 
   const onPaneClick = useCallback(
@@ -2797,7 +3073,7 @@ export default function StrategyCanvas() {
   }, [selectedSetName])
 
   const activateFlow = useCallback(
-    (rootNodeId: string) => {
+    (rootNodeId: string, activationCfg?: ActionConfig) => {
       if (startupMode !== 'virtual') {
         return
       }
@@ -2827,22 +3103,67 @@ export default function StrategyCanvas() {
       if (rootData.active === false) {
         return
       }
-      const qty = typeof rootData.quantity === 'number' && Number.isFinite(rootData.quantity) ? rootData.quantity : 0
-      if (!(qty > 0)) {
-        return
-      }
-
       const now = Date.now()
       const side = rootData.side === 'sell' ? 'sell' : 'buy'
 
       const usd = typeof paper.balances?.USD === 'number' && Number.isFinite(paper.balances.USD) ? paper.balances.USD : 0
 
       const marketFill = lastPrice
+
+      const cfg =
+        activationCfg ??
+        (((rootData as any).activationConfig as ActionConfig | undefined) ?? null)
+
+      const leverageRaw = typeof cfg?.leverage === 'number' && Number.isFinite(cfg.leverage) ? cfg.leverage : 1
+      const leverage = Math.max(1, Math.min(5, Math.round(leverageRaw)))
+
+      const qtyFromCfg = (() => {
+        const unit = (cfg?.sizeUnit ?? 'usd') as 'usd' | 'base' | 'percent'
+        const raw = typeof cfg?.size === 'number' && Number.isFinite(cfg.size) ? cfg.size : 0
+        if (!(raw > 0) || !(marketFill > 0)) {
+          return 0
+        }
+
+        if (unit === 'base') {
+          return raw
+        }
+
+        if (unit === 'percent') {
+          const pct = Math.max(0, Math.min(100, raw))
+          const usedMarginApprox = (paper.openPositions ?? []).reduce((sum, p) => {
+            const lev = typeof (p as any).leverage === 'number' && Number.isFinite((p as any).leverage) ? (p as any).leverage : 1
+            const margin =
+              typeof (p as any).marginUsedUsd === 'number' && Number.isFinite((p as any).marginUsedUsd)
+                ? (p as any).marginUsedUsd
+                : typeof (p as any).entryPrice === 'number' && Number.isFinite((p as any).entryPrice) && typeof (p as any).amount === 'number' && Number.isFinite((p as any).amount)
+                  ? (((p as any).entryPrice * (p as any).amount) / Math.max(1, lev))
+                  : 0
+            return sum + (Number.isFinite(margin) ? margin : 0)
+          }, 0)
+          const equityApprox = usd + usedMarginApprox
+          const usdAmount = equityApprox * (pct / 100)
+          return usdAmount / marketFill
+        }
+
+        return raw / marketFill
+      })()
+
+      const qtyFallback = typeof rootData.quantity === 'number' && Number.isFinite(rootData.quantity) ? rootData.quantity : 0
+      const qty = qtyFromCfg > 0 ? qtyFromCfg : qtyFallback
+      if (!(qty > 0)) {
+        return
+      }
+
       const notionalUsd = qty * marketFill
       if (!(Number.isFinite(notionalUsd) && notionalUsd > 0)) {
         return
       }
-      if (usd < notionalUsd) {
+
+      const marginUsedUsd = notionalUsd / leverage
+      if (!(Number.isFinite(marginUsedUsd) && marginUsedUsd > 0)) {
+        return
+      }
+      if (usd < marginUsedUsd) {
         return
       }
 
@@ -2856,8 +3177,8 @@ export default function StrategyCanvas() {
         amount: qty,
         entryPrice: marketFill,
         openedAt: now,
-        leverage: 1,
-        marginUsedUsd: notionalUsd,
+        leverage,
+        marginUsedUsd,
       }
 
       const ocoGroupId = `oco_${now}_${Math.random().toString(16).slice(2)}`
@@ -2961,7 +3282,7 @@ export default function StrategyCanvas() {
 
       const nextPaper = {
         ...paper,
-        balances: { ...(paper.balances ?? {}), USD: usd - notionalUsd },
+        balances: { ...(paper.balances ?? {}), USD: usd - marginUsedUsd },
         openPositions: [...paper.openPositions, position as any],
         openOrders: [...paper.openOrders, ...createdExitOrders],
         updatedAt: now,
@@ -2979,11 +3300,62 @@ export default function StrategyCanvas() {
           if (d.active === false) {
             return n
           }
+
+          if (n.id === rootNodeId && activationCfg) {
+            return { ...n, data: { ...d, activationConfig: activationCfg, quantity: qty, active: false } }
+          }
+
+          if (d.isChild && isExitNodeType(String(n.type ?? ''))) {
+            const root = nds.find((x) => x.id === rootNodeId)
+            const rootSide = (root?.data as any)?.side
+            const rootRefPrice = typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null
+            if (rootRefPrice && typeof d.relativeOffsetPct === 'number' && Number.isFinite(d.relativeOffsetPct)) {
+              const frozenPrice = rootRefPrice * (1 + d.relativeOffsetPct / 100)
+              const nextData: any = { ...d, active: false, rootNodeId: rootNodeId }
+              nextData.anchorPrice = frozenPrice
+              if (n.type === 'stop_loss' || n.type === 'stop_loss_limit') {
+                nextData.stopPrice = frozenPrice
+              }
+              if (n.type === 'take_profit' || n.type === 'take_profit_limit') {
+                nextData.triggerPrice = frozenPrice
+              }
+
+              if (n.type !== 'trailing_stop' && n.type !== 'trailing_stop_limit') {
+                delete nextData.relativeOffsetPct
+                delete nextData.relativeOffsetX
+              }
+
+              if (rootSide === 'buy' || rootSide === 'sell') {
+                nextData.side = rootSide === 'buy' ? 'sell' : 'buy'
+              }
+
+              return { ...n, data: nextData }
+            }
+          }
+
           return { ...n, data: { ...d, active: false } }
         }),
       )
     },
     [accountDispatch, accountState.paper, edges, lastPrice, nodes, startupMode, symbol],
+  )
+
+  const requestActivate = useCallback(
+    (nodeId: string) => {
+      if (startupMode !== 'virtual') {
+        return
+      }
+      const n = nodes.find((x) => x.id === nodeId)
+      if (!n?.type || !isRootNodeType(n.type) || n.type !== 'market') {
+        return
+      }
+      const d = (n.data as any) ?? {}
+      if (d.active === false) {
+        return
+      }
+      setActivationEditor({ nodeId })
+    },
+    [nodes, startupMode],
   )
 
   useEffect(() => {
@@ -2993,11 +3365,11 @@ export default function StrategyCanvas() {
       if (typeof nodeId !== 'string') {
         return
       }
-      activateFlow(nodeId)
+      requestActivate(nodeId)
     }
     window.addEventListener('kf_activate_node', onActivate as any)
     return () => window.removeEventListener('kf_activate_node', onActivate as any)
-  }, [activateFlow])
+  }, [requestActivate])
 
   const onPaneScroll = useCallback(
     (event?: any) => {
@@ -3477,7 +3849,7 @@ export default function StrategyCanvas() {
         const n = nodes.find((x) => x.id === selectedNodeId)
         if (n?.type && isRootNodeType(n.type)) {
           e.preventDefault()
-          activateFlow(n.id)
+          requestActivate(n.id)
         }
       }
 
@@ -3507,7 +3879,7 @@ export default function StrategyCanvas() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [activationLines, activateFlow, circles, deleteNode, nodes, parallelLines, rectangles, selectedActivationLineId, selectedCircleId, selectedNodeId, selectedParallelId, selectedRectangleId])
+  }, [activationLines, circles, deleteNode, nodes, parallelLines, rectangles, requestActivate, selectedActivationLineId, selectedCircleId, selectedNodeId, selectedParallelId, selectedRectangleId])
 
   const selectedShape = useMemo(() => {
     if (selectedActivationLineId) return { type: 'line' as const, id: selectedActivationLineId }
@@ -3525,7 +3897,23 @@ export default function StrategyCanvas() {
     return shapeTriggers.filter((t) => t.shapeId === selectedShape.id && t.shapeType === selectedShape.type)
   }, [selectedShape, shapeTriggers])
 
-  const [actionEditor, setActionEditor] = useState<null | { triggerId: string; actionId: string }>(null)
+  const [activationEditor, setActivationEditor] = useState<null | { nodeId: string }>(null)
+  const [actionEditor, setActionEditor] = useState<null | { triggerId: string; actionId: string; isNew?: boolean }>(null)
+
+  const activeActivationEditor = useMemo(() => {
+    if (!activationEditor) {
+      return null
+    }
+    const n = nodes.find((x) => x.id === activationEditor.nodeId)
+    if (!n) {
+      return null
+    }
+    const d = (n.data as any) ?? {}
+    const side = d.side === 'sell' ? 'sell' : 'buy'
+    const actionType: TriggerActionType = side === 'buy' ? 'market_buy' : 'market_sell'
+    const config = ((d.activationConfig as ActionConfig | undefined) ?? null) as ActionConfig | null
+    return { nodeId: n.id, actionType, config }
+  }, [activationEditor, nodes])
 
   const activeActionEditor = useMemo(() => {
     if (!actionEditor) {
@@ -3703,6 +4091,14 @@ export default function StrategyCanvas() {
         return { ...base, side: nextSide, closePercent: 100, trailingOffsetUnit: 'percent', trailingOffset: 1 }
       }
 
+      const exitBase: ActionConfig =
+        type === 'stop_loss' ||
+        type === 'stop_loss_limit' ||
+        type === 'take_profit' ||
+        type === 'take_profit_limit'
+          ? { ...base, closePercent: 100 }
+          : base
+
       const mid = (domain.min + domain.max) / 2
       const anchorPrice =
         typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice >= domain.min && lastPrice <= domain.max
@@ -3715,21 +4111,23 @@ export default function StrategyCanvas() {
 
       if (typeof anchorPrice === 'number' && Number.isFinite(anchorPrice)) {
         if (type === 'take_profit' || type === 'take_profit_limit') {
-          const mult = base.side === 'buy' ? 0.99 : 1.01
-          return { ...base, triggerPrice: anchorPrice * mult }
+          const mult = exitBase.side === 'buy' ? 0.99 : 1.01
+          const level = anchorPrice * mult
+          return type === 'take_profit_limit' ? { ...exitBase, triggerPrice: level, limitPrice: level } : { ...exitBase, triggerPrice: level }
         }
         if (type === 'stop_loss' || type === 'stop_loss_limit') {
-          const mult = base.side === 'buy' ? 1.01 : 0.99
-          return { ...base, stopPrice: anchorPrice * mult }
+          const mult = exitBase.side === 'buy' ? 1.01 : 0.99
+          const level = anchorPrice * mult
+          return type === 'stop_loss_limit' ? { ...exitBase, stopPrice: level, limitPrice: level } : { ...exitBase, stopPrice: level }
         }
         if (type === 'limit_buy') {
-          return { ...base, limitPrice: anchorPrice * 0.995 }
+          return { ...exitBase, limitPrice: anchorPrice * 0.995 }
         }
         if (type === 'limit_sell') {
-          return { ...base, limitPrice: anchorPrice * 1.005 }
+          return { ...exitBase, limitPrice: anchorPrice * 1.005 }
         }
       }
-      return base
+      return exitBase
     },
     [domain.max, domain.min, lastPrice],
   )
@@ -3765,7 +4163,7 @@ export default function StrategyCanvas() {
         }),
       )
 
-      setActionEditor({ triggerId, actionId })
+      setActionEditor({ triggerId, actionId, isNew: true })
     },
     [defaultConfigForAction, mapDroppedBlockToActionType],
   )
@@ -3778,7 +4176,45 @@ export default function StrategyCanvas() {
         return
       }
       const actionId = `action_${now}_${Math.random().toString(16).slice(2)}`
-      const config = defaultConfigForAction(type, side)
+
+      const effectiveSide = (() => {
+        const isExit =
+          type === 'stop_loss' ||
+          type === 'stop_loss_limit' ||
+          type === 'take_profit' ||
+          type === 'take_profit_limit' ||
+          type === 'trailing_stop' ||
+          type === 'trailing_stop_limit'
+
+        if (!isExit) {
+          return side
+        }
+
+        const t = shapeTriggers.find((x) => x.id === triggerId)
+        const parent = t ? findTriggerAction(t.actions, parentActionId) : null
+        const parentType = String((parent as any)?.type ?? '')
+        const parentCfg = ((parent as any)?.config as any) ?? {}
+        const parentSide =
+          parentType.includes('_buy')
+            ? 'buy'
+            : parentType.includes('_sell')
+              ? 'sell'
+              : parentCfg.side === 'buy'
+                ? 'buy'
+                : parentCfg.side === 'sell'
+                  ? 'sell'
+                  : null
+
+        if (parentSide === 'buy') {
+          return 'sell'
+        }
+        if (parentSide === 'sell') {
+          return 'buy'
+        }
+        return side
+      })()
+
+      const config = defaultConfigForAction(type, effectiveSide)
 
       const child: TriggerAction = {
         id: actionId,
@@ -3794,8 +4230,19 @@ export default function StrategyCanvas() {
           return { ...t, actions: addChildAction(t.actions, parentActionId, child) }
         }),
       )
+
+      if (
+        type === 'stop_loss' ||
+        type === 'stop_loss_limit' ||
+        type === 'take_profit' ||
+        type === 'take_profit_limit' ||
+        type === 'trailing_stop' ||
+        type === 'trailing_stop_limit'
+      ) {
+        setActionEditor({ triggerId, actionId, isNew: true })
+      }
     },
-    [defaultConfigForAction, mapDroppedBlockToActionType],
+    [defaultConfigForAction, mapDroppedBlockToActionType, shapeTriggers],
   )
 
   const onOpenChildActionContextMenu = useCallback(
@@ -3804,6 +4251,13 @@ export default function StrategyCanvas() {
         x: opts.x,
         y: opts.y,
         items: [
+          {
+            id: 'edit_child_action',
+            label: 'Edit',
+            onClick: () => {
+              setActionEditor({ triggerId: opts.triggerId, actionId: opts.actionId })
+            },
+          },
           {
             id: 'delete_child_action',
             label: 'Delete action',
@@ -3834,10 +4288,33 @@ export default function StrategyCanvas() {
       ) : null}
 
       <TriggerActionConfigModal
+        open={Boolean(activeActivationEditor)}
+        actionType={activeActivationEditor?.actionType ?? null}
+        config={activeActivationEditor?.config ?? null}
+        onClose={() => setActivationEditor(null)}
+        onSave={(next) => {
+          const ed = activeActivationEditor
+          if (!ed) {
+            return
+          }
+          setActivationEditor(null)
+          activateFlow(ed.nodeId, next)
+        }}
+      />
+      <TriggerActionConfigModal
         open={Boolean(activeActionEditor)}
         actionType={activeActionEditor?.actionType ?? null}
         config={activeActionEditor?.config ?? null}
-        onClose={() => setActionEditor(null)}
+        onClose={() => {
+          const ed = actionEditor
+          if (ed?.isNew) {
+            setShapeTriggers((ts) =>
+              ts.map((t) => (t.id === ed.triggerId ? { ...t, actions: removeTriggerAction(t.actions, ed.actionId) } : t)),
+            )
+            setSelectedActionId((cur) => (cur === ed.actionId ? null : cur))
+          }
+          setActionEditor(null)
+        }}
         onSave={(next) => {
           const ed = activeActionEditor
           if (!ed) {
@@ -4477,7 +4954,37 @@ export default function StrategyCanvas() {
                     data,
                   }
 
-                  setNodes((ns) => [...ns, applyAnchors(newNode)])
+                  let anchored = applyAnchors(newNode)
+                  const rootData = (rootNode.data as Record<string, unknown>) ?? {}
+                  const rootRefPrice =
+                    rootNode.type === 'market'
+                      ? typeof lastPrice === 'number' && Number.isFinite(lastPrice) && lastPrice > 0
+                        ? lastPrice
+                        : null
+                      : typeof (rootData as any).limitPrice === 'number' && Number.isFinite((rootData as any).limitPrice) && (rootData as any).limitPrice > 0
+                        ? (rootData as any).limitPrice
+                        : typeof (rootData as any).anchorPrice === 'number' && Number.isFinite((rootData as any).anchorPrice) && (rootData as any).anchorPrice > 0
+                          ? (rootData as any).anchorPrice
+                          : null
+
+                  const anchoredData = (anchored.data as Record<string, unknown>) ?? {}
+                  const childPrice = typeof (anchoredData as any).anchorPrice === 'number' && Number.isFinite((anchoredData as any).anchorPrice) && (anchoredData as any).anchorPrice > 0
+                    ? (anchoredData as any).anchorPrice
+                    : null
+                  const relativeOffsetPct = rootRefPrice && childPrice ? ((childPrice / rootRefPrice) - 1) * 100 : undefined
+                  const relativeOffsetX = anchored.position.x - rootNode.position.x
+
+                  anchored = {
+                    ...anchored,
+                    data: {
+                      ...anchoredData,
+                      rootNodeId: rootNode.id,
+                      relativeOffsetPct,
+                      relativeOffsetX,
+                    },
+                  }
+
+                  setNodes((ns) => [...ns, anchored])
 
                   // Auto-connect to root
                   const newEdge: Edge = {
@@ -4766,7 +5273,9 @@ export default function StrategyCanvas() {
           y={nodeContextMenu.y}
           items={(() => {
             const nodeId = nodeContextMenu.nodeId
-            const hasChildren = nodes.some((n) => n.parentId === nodeId)
+            const n = nodes.find((x) => x.id === nodeId)
+            const hasChildren = nodes.some((x) => x.parentId === nodeId)
+
             const items: ContextMenuItem[] = [
               {
                 id: 'delete_block',
@@ -4776,22 +5285,17 @@ export default function StrategyCanvas() {
               },
             ]
 
-            const n = nodes.find((x) => x.id === nodeId)
             if (n?.type && isRootNodeType(n.type)) {
               items.unshift({
                 id: 'activate',
                 label: 'Activate',
-                onClick: () => activateFlow(nodeId),
+                onClick: () => {
+                  setNodeContextMenu(null)
+                  requestActivate(nodeId)
+                },
               })
             }
-            if (hasChildren) {
-              items.push({
-                id: 'delete_block_children',
-                label: 'Delete Block + Children',
-                danger: true,
-                onClick: () => deleteNodeWithChildren(nodeId),
-              })
-            }
+
             return items
           })()}
           onClose={() => setNodeContextMenu(null)}
