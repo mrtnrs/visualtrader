@@ -434,6 +434,7 @@ function PriceInputWithDiff({
 // Toggle Switch
 // ═══════════════════════════════════════════════════════════════════════════
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function _ToggleSwitch({
   label,
   description,

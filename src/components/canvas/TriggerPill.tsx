@@ -19,7 +19,7 @@ export default function TriggerPill({
   onToggleActive,
   onEditAction,
   onClickBadge,
-  selectedActionId,
+  selectedActionId: _unusedSelectedActionId,
   onSelectAction,
   onPrimaryActionEl,
 }: {
@@ -42,6 +42,7 @@ export default function TriggerPill({
   onSelectAction: (actionId: string | null) => void
   onPrimaryActionEl?: (triggerId: string, el: HTMLDivElement | null) => void
 }) {
+  void _unusedSelectedActionId // suppress unused warning
   const [dropHover, setDropHover] = useState(false)
 
   const actionBlockRef = useCallback(
@@ -98,9 +99,6 @@ export default function TriggerPill({
   }
 
 
-  // Visual Components
-  // 1. Condition Trigger (Small Badge)
-  const _hasAction = trigger.actions.length > 0
   const triggerBadgeStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',

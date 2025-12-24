@@ -191,6 +191,8 @@ export default function ShapeTriggerTooltip({
   onClose: () => void
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
+  // Suppress TypeScript unused warnings for props reserved for future use
+  void title
 
   // Close on click outside
   useEffect(() => {
@@ -228,6 +230,7 @@ export default function ShapeTriggerTooltip({
     padding: '10px 10px 8px',
     borderBottom: '1px solid rgba(255,255,255,0.08)',
   }
+  void _headerStyle // reserved for future use
 
   const sectionTitleStyle: CSSProperties = {
     fontSize: 11,

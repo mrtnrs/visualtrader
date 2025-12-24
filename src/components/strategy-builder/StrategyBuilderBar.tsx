@@ -222,7 +222,8 @@ const PARALLEL_ITEMS: DockItemDef[] = [
     { id: 'enter-channel', label: 'Enter Channel', icon: <IconEnterZone />, condition: 'enter_channel' as ParallelCondition },
 ]
 
-const _ITEMS_BY_SHAPE: Record<ShapeType, DockItemDef[]> = {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const ITEMS_BY_SHAPE: Record<ShapeType, DockItemDef[]> = {
     line: LINE_ITEMS,
     rectangle: RECTANGLE_ITEMS,
     circle: CIRCLE_ITEMS,
