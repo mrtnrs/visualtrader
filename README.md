@@ -36,7 +36,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) and start drawing! 🎨
+Open [http://localhost:5173](http://localhost:5173) to start trading.
 
 ---
 
@@ -71,17 +71,14 @@ Drag an action block from the bottom dock onto a trigger:
 
 | Action | Description |
 |--------|-------------|
-| ⚡ **Market** | Instant buy/sell at market price |
-| 📊 **Limit** | Buy/sell at specified price |
-| 🛑 **Stop Loss** | Close position if price moves against you |
-| 🎯 **Take Profit** | Close position at profit target |
-| 📈 **Trailing Stop** | Dynamic stop that follows price |
+| **Market** | Instant buy/sell at market price |
+| **Limit** | Buy/sell at specified price |
+| **Stop Loss** | Close position if price moves against you |
+| **Take Profit** | Close position at profit target |
+| **Trailing Stop** | Dynamic stop that follows price |
 
 ### 5. Paper Trading
-Enable **Virtual Mode** in the account sidebar to simulate trades:
-- Positions open/close based on your triggers
-- Track P&L in real-time
-- Test strategies without risking capital
+Starting the app grants you a beautiful sum of 10k (sadly virtual) money to trade. Trades update your balance, so show us what you can do! 
 
 ---
 
@@ -126,13 +123,13 @@ src/
 
 ## 📦 Key Features
 
-- **🎨 Visual Strategy Builder** — Draw shapes, attach triggers, define actions
-- **⚡ Real-time Data** — Live WebSocket feed from Kraken
-- **🔄 Shape Triggers** — 15+ condition types (cross up/down, enter/exit zone, etc.)
-- **📊 Paper Trading** — Full margin simulation with leverage, liquidation, slippage
-- **💾 Strategy Sets** — Save, load, and share complete configurations
-- **🎯 Child Orders** — Attach SL/TP to entries, stored as relative % offsets
-- **🖱️ Drag & Drop** — Move blocks, resize shapes, reposition orders
+- **Visual Strategy Builder** — Draw shapes, attach triggers, define actions
+- **Real-time Data** — Live WebSocket feed from Kraken
+- **Shape Triggers** — 15+ condition types (cross up/down, enter/exit zone, etc.)
+- **Paper Trading** — Full margin simulation with leverage, liquidation, slippage
+- **Strategy Sets** — Save, load, and share complete configurations
+- **Child Orders** — Attach SL/TP to entries, stored as relative % offsets
+- **Drag & Drop** — Move blocks, resize shapes, reposition orders
 
 ---
 
@@ -181,7 +178,7 @@ MIT — do whatever you want with it.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [React Flow](https://reactflow.dev/) — The incredible open-source library powering the node graph
 - [Kraken](https://www.kraken.com/) — For the WebSocket API
