@@ -139,6 +139,7 @@ export default function PriceChartLayer({
   shapeTriggers = [],
   selectedShapeId,
   selectedPositionId,
+  selectedExitOrderId,
   activationLines,
   circles,
   rectangles,
@@ -157,6 +158,7 @@ export default function PriceChartLayer({
   onSelectParallel,
   onStartDragActivationLineEndpoint,
   onSelectPosition,
+  onSelectExitOrder,
   onDropPositionAction,
   onClosePosition,
   onDragPositionExitStart,
@@ -174,6 +176,7 @@ export default function PriceChartLayer({
   shapeTriggers?: ShapeTrigger[]
   selectedShapeId?: string | null
   selectedPositionId?: string | null
+  selectedExitOrderId?: string | null
   activationLines: ActivationLine[]
   circles: CircleAnnotation[]
   rectangles: RectangleAnnotation[]
@@ -192,6 +195,7 @@ export default function PriceChartLayer({
   onSelectParallel: (id: string) => void
   onStartDragActivationLineEndpoint: (id: string, endpoint: 'a' | 'b') => void
   onSelectPosition?: (id: string | null) => void
+  onSelectExitOrder?: (orderId: string | null) => void
   onDropPositionAction?: (positionId: string, blockType: string) => void
   onClosePosition?: (positionId: string) => void
   onDragPositionExitStart?: (orderId: string, startY: number, type: 'price' | 'offset', startVal: number) => void
@@ -838,7 +842,7 @@ export default function PriceChartLayer({
           y: toY(o.price),
           color,
           dim: false,
-          strong: Boolean(selectedPositionId) && o.positionId === selectedPositionId,
+          strong: (typeof selectedExitOrderId === 'string' && o.id === selectedExitOrderId) || (Boolean(selectedPositionId) && o.positionId === selectedPositionId),
           label: `${kind} ${fmt(o.price)}${suffix}`,
         })
       }
@@ -1007,14 +1011,14 @@ export default function PriceChartLayer({
             order={o}
             pnlPct={pnlPct}
             closePercent={closePercent}
+            selected={typeof selectedExitOrderId === 'string' && selectedExitOrderId === o.id}
             left={left}
             top={top}
             width={blockW}
             height={blockH}
             interactionDisabled={interactionDisabled}
-            onOpenSettings={(orderId) => {
-              setExitMenu(null)
-              onOpenExitEditor(orderId)
+            onSelect={(orderId) => {
+              onSelectExitOrder?.(orderId)
             }}
             onContextMenu={(orderId, e) => {
               setExitEditor(null)

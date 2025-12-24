@@ -369,6 +369,9 @@ export default function TriggerPillManager({
     const nodes: ReactNode[] = []
 
     for (const pill of pills) {
+      if (pill.trigger.triggeredAt) {
+        continue
+      }
       const primary = pill.trigger.actions[0]
       if (!primary || !Array.isArray(primary.children) || primary.children.length === 0) {
         continue

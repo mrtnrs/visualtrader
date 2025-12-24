@@ -32,6 +32,7 @@ export interface PositionExitBlockProps {
     order: AccountOrder
     pnlPct?: number | null
     closePercent?: number | null
+    selected?: boolean
     left: number
     top: number
     width: number
@@ -39,13 +40,14 @@ export interface PositionExitBlockProps {
     interactionDisabled: boolean
     onDragStart?: (orderId: string, startY: number, type: 'price' | 'offset', startVal: number) => void
     onContextMenu?: (orderId: string, e: ReactMouseEvent) => void
-    onOpenSettings?: (orderId: string) => void
+    onSelect?: (orderId: string) => void
 }
 
 export function PositionExitBlock({
     order,
     pnlPct,
     closePercent,
+    selected,
     left,
     top,
     width,
@@ -53,7 +55,7 @@ export function PositionExitBlock({
     interactionDisabled,
     onDragStart,
     onContextMenu,
-    onOpenSettings,
+    onSelect,
 }: PositionExitBlockProps) {
     const o = order
     const color = colorFor(o.type)
@@ -87,9 +89,8 @@ export function PositionExitBlock({
         e.preventDefault()
         e.stopPropagation()
 
-        if (onOpenSettings) {
-            onOpenSettings(o.id)
-            return
+        if (onSelect) {
+            onSelect(o.id)
         }
 
         if (!onDragStart) {
@@ -110,18 +111,18 @@ export function PositionExitBlock({
                 width,
                 height,
                 borderRadius: 14,
-                border: `1px solid rgba(255, 255, 255, 0.12)`,
+                border: selected ? '2px solid rgba(255, 255, 255, 0.6)' : `1px solid rgba(255, 255, 255, 0.12)`,
                 background: 'rgba(var(--kf-deep-rgb), 0.78)',
                 backdropFilter: 'blur(10px)',
                 WebkitBackdropFilter: 'blur(10px)',
-                boxShadow: '0 6px 18px rgba(0,0,0,0.22)',
+                boxShadow: selected ? '0 10px 26px rgba(0,0,0,0.42)' : '0 6px 18px rgba(0,0,0,0.22)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
                 padding: '9px 10px',
-                cursor: interactionDisabled ? 'default' : (onOpenSettings ? 'pointer' : 'default'),
+                cursor: interactionDisabled ? 'default' : 'pointer',
                 pointerEvents: interactionDisabled ? 'none' : 'auto',
                 zIndex: 156,
             }}

@@ -155,6 +155,7 @@ export default function StrategyCanvas() {
   const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(null)
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null)
+  const [selectedExitOrderId, setSelectedExitOrderId] = useState<string | null>(null)
 
   const [pendingExitEditorOrderId, setPendingExitEditorOrderId] = useState<string | null>(null)
 
@@ -315,6 +316,22 @@ export default function StrategyCanvas() {
     }
     return p.side === 'long' ? ('market_buy' as const) : ('market_sell' as const)
   }, [accountState.paper?.openPositions, selectedPositionId])
+
+  const selectedExitOrderDockType = useMemo(() => {
+    if (!selectedExitOrderId) {
+      return null
+    }
+    const o = accountState.paper?.openOrders?.find((x) => x.id === selectedExitOrderId)
+    const posId = (o as any)?.positionId
+    if (typeof posId !== 'string') {
+      return null
+    }
+    const p = accountState.paper?.openPositions?.find((x) => x.id === posId)
+    if (!p) {
+      return null
+    }
+    return p.side === 'long' ? ('market_buy' as const) : ('market_sell' as const)
+  }, [accountState.paper?.openOrders, accountState.paper?.openPositions, selectedExitOrderId])
 
   const topMarkets = useMemo(() => ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'DOGE/USD'], [])
 
@@ -2147,6 +2164,7 @@ export default function StrategyCanvas() {
   const onNodeClick = useCallback(
     (_: MouseEvent, node: Node) => {
       setSelectedPositionId(null)
+      setSelectedExitOrderId(null)
       dispatch({ type: 'select_node', nodeId: node.id })
     },
     [dispatch],
@@ -4821,7 +4839,7 @@ export default function StrategyCanvas() {
               {/* Strategy Builder Floating Dock */}
               <StrategyBuilderBar
                 hasRootBlock={hasRootBlock}
-                selectedActionType={((selectedPositionDockType ?? selectedTriggerPrimaryActionType ?? selectedDockNodeType) ?? null) as any}
+                selectedActionType={((selectedExitOrderDockType ?? selectedPositionDockType ?? selectedTriggerPrimaryActionType ?? selectedDockNodeType) ?? null) as any}
                 selectedShape={
                   selectedActivationLineId ? { type: 'line', id: selectedActivationLineId } :
                     selectedRectangleId ? { type: 'rectangle', id: selectedRectangleId } :
@@ -5125,6 +5143,7 @@ export default function StrategyCanvas() {
                   shapeTriggers={shapeTriggers}
                   selectedShapeId={selectedShape?.id ?? null}
                   selectedPositionId={selectedPositionId}
+                  selectedExitOrderId={selectedExitOrderId}
                   activationLines={activationLinesWithDraft}
                   circles={circlesWithDraft}
                   rectangles={rectanglesWithDraft}
@@ -5143,6 +5162,7 @@ export default function StrategyCanvas() {
                     setSelectedRectangleId(null)
                     setSelectedParallelId(null)
                     setSelectedPositionId(null)
+                    setSelectedExitOrderId(null)
                     dispatch({ type: 'select_node', nodeId: null })
                   }}
                   onSelectCircle={(id) => {
@@ -5151,6 +5171,7 @@ export default function StrategyCanvas() {
                     setSelectedRectangleId(null)
                     setSelectedParallelId(null)
                     setSelectedPositionId(null)
+                    setSelectedExitOrderId(null)
                     dispatch({ type: 'select_node', nodeId: null })
                   }}
                   onSelectRectangle={(id) => {
@@ -5159,6 +5180,7 @@ export default function StrategyCanvas() {
                     setSelectedCircleId(null)
                     setSelectedParallelId(null)
                     setSelectedPositionId(null)
+                    setSelectedExitOrderId(null)
                     dispatch({ type: 'select_node', nodeId: null })
                   }}
                   onSelectParallel={(id) => {
@@ -5167,6 +5189,7 @@ export default function StrategyCanvas() {
                     setSelectedCircleId(null)
                     setSelectedRectangleId(null)
                     setSelectedPositionId(null)
+                    setSelectedExitOrderId(null)
                     dispatch({ type: 'select_node', nodeId: null })
                   }}
                   onStartDragActivationLineEndpoint={(id: string, endpoint: 'a' | 'b') => {
@@ -5175,6 +5198,18 @@ export default function StrategyCanvas() {
                   }}
                   onSelectPosition={(id) => {
                     setSelectedPositionId(id)
+                    setSelectedExitOrderId(null)
+                    setSelectedActivationLineId(null)
+                    setSelectedCircleId(null)
+                    setSelectedRectangleId(null)
+                    setSelectedParallelId(null)
+                    setSelectedTriggerId(null)
+                    setSelectedActionId(null)
+                    dispatch({ type: 'select_node', nodeId: null })
+                  }}
+                  onSelectExitOrder={(orderId) => {
+                    setSelectedExitOrderId(orderId)
+                    setSelectedPositionId(null)
                     setSelectedActivationLineId(null)
                     setSelectedCircleId(null)
                     setSelectedRectangleId(null)
