@@ -5285,6 +5285,15 @@ export default function StrategyCanvas() {
               },
             ]
 
+            if (hasChildren) {
+              items.unshift({
+                id: 'delete_block_with_children',
+                label: 'Delete Block + Children',
+                danger: true,
+                onClick: () => deleteNodeWithChildren(nodeId),
+              })
+            }
+
             if (n?.type && isRootNodeType(n.type)) {
               items.unshift({
                 id: 'activate',
